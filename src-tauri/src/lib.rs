@@ -45,6 +45,7 @@ struct AppState {
     last_toggle_time: AtomicU64,
     last_dismiss_time: AtomicU64,
     is_visible: AtomicBool,
+    own_process_id: u32,
 }
 
 fn dist_to_rect(px: f64, py: f64, rx: f64, ry: f64, rw: f64, rh: f64) -> f64 {
@@ -121,77 +122,16 @@ fn toggle_maximize(app: AppHandle, state: tauri::State<Arc<AppState>>) {
 
 pub fn run() {
     tracing_subscriber::fmt::init();
-    let app_state = Arc::new(AppState::default());
+    let app_state = Arc::new(AppState {
+        own_process_id: std::process::id(),
+        ..Default::default()
+    });
     app_state.use_ui_automation.store(true, Ordering::Relaxed);
 
     let setup_state = app_state.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .register_asynchronous_uri_scheme_protocol("wormhole", |_app, request, responder| {
-            let uri = request.uri().to_string();
-            let url_str = if uri.contains("localhost/") {
-                uri.splitn(2, "localhost/").nth(1).unwrap_or("")
-            } else {
-                uri.strip_prefix("wormhole://localhost").unwrap_or(&uri)
-            };
-            
-            let target_url = match urlencoding::decode(url_str) {
-                Ok(u) => u.to_string(),
-                Err(_) => url_str.to_string(),
-            };
-
-            tauri::async_runtime::spawn(async move {
-                if target_url.is_empty() || !target_url.starts_with("http") {
-                    let _ = responder.respond(tauri::http::Response::builder().status(400).body(Vec::new()).unwrap());
-                    return;
-                }
-                
-                let client = reqwest::Client::builder()
-                    .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .timeout(std::time::Duration::from_secs(15))
-                    .build()
-                    .unwrap_or_default();
-
-                match client.get(&target_url).send().await {
-                    Ok(resp) => {
-                        let final_url: String = resp.url().to_string();
-                        let content_type: String = resp.headers().get("content-type")
-                            .and_then(|h: &reqwest::header::HeaderValue| h.to_str().ok())
-                            .unwrap_or("text/html").to_string();
-                        
-                        let is_html = content_type.contains("text/html");
-                        let bytes_result = resp.bytes().await;
-                        let mut bytes: Vec<u8> = bytes_result.unwrap_or_default().to_vec();
-
-                        if is_html {
-                            let mut html = String::from_utf8_lossy(&bytes).to_string();
-                            let base_tag = format!(r#"<base href="{}">"#, final_url);
-                            
-                            if let Some(pos) = html.to_lowercase().find("<head>") {
-                                html.insert_str(pos + 6, &base_tag);
-                            } else if let Some(pos) = html.to_lowercase().find("<html>") {
-                                html.insert_str(pos + 6, &format!("<head>{}</head>", base_tag));
-                            } else {
-                                html = format!(r#"<head>{}</head>{}"#, base_tag, html);
-                            }
-                            bytes = html.into_bytes();
-                        }
-                        
-                        let tauri_resp = tauri::http::Response::builder()
-                            .header("Content-Type", content_type)
-                            .header("Access-Control-Allow-Origin", "*")
-                            .header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; style-src * 'unsafe-inline'; frame-ancestors *")
-                            .body(bytes)
-                            .unwrap();
-                        let _ = responder.respond(tauri_resp);
-                    }
-                    Err(_) => {
-                        let _ = responder.respond(tauri::http::Response::builder().status(404).body(Vec::new()).unwrap());
-                    }
-                }
-            });
-        })
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![get_wormlink_data, toggle_maximize, dismiss_portal, toggle_pin])
         .setup(move |app| {
@@ -325,7 +265,10 @@ async fn update_active_portal(app: &AppHandle, state: &AppState, m: WormlinkMatc
             .always_on_top(true)
             .skip_taskbar(true)
             .visible(false);
-        
+            
+        #[cfg(target_os = "windows")]
+        let builder = builder.additional_browser_args("--disable-web-security --disable-features=IsolateOrigins,site-per-process");
+
         if let Ok(window) = builder.build() {
             let _ = window.set_position(Position::Physical(PhysicalPosition { x: m.x as i32, y: m.y as i32 }));
             let _ = window.show();
