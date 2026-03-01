@@ -1,0 +1,39 @@
+# Workspace
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.svelte-kit/
+.vercel
+.output
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.env
+.env.*
+!.env.example
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/
+src-tauri/qt_lib/
+
+# OS / Misc
+.DS_Store
+Thumbs.db
+desktop.ini
+*.bak
+*.log
+
+# Gemini CLI / Temp
+.gemini/
+**/tool-outputs/
