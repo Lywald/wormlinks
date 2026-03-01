@@ -150,29 +150,33 @@ pub fn run() {
                 }
                 
                 let client = reqwest::Client::builder()
-                    .timeout(std::time::Duration::from_secs(10))
+                    .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .timeout(std::time::Duration::from_secs(15))
+                    .redirect(reqwest::redirect::Policy::default())
                     .build()
                     .unwrap_or_default();
 
-                match client.get(&target_url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .send().await {
+                match client.get(&target_url).send().await {
                     Ok(resp) => {
-                        let content_type = resp.headers().get("content-type")
+                        let final_url: String = resp.url().to_string();
+                        let content_type: String = resp.headers().get("content-type")
                             .and_then(|h: &reqwest::header::HeaderValue| h.to_str().ok())
                             .unwrap_or("text/html").to_string();
                         
                         let is_html = content_type.contains("text/html");
-                        let mut bytes = resp.bytes().await.unwrap_or_default().to_vec();
+                        let bytes_result = resp.bytes().await;
+                        let mut bytes: Vec<u8> = bytes_result.unwrap_or_default().to_vec();
 
                         if is_html {
                             let mut html = String::from_utf8_lossy(&bytes).to_string();
-                            // Inject <base> tag to resolve relative paths correctly
-                            let base_tag = format!(r#"<head><base href="{}">"#, target_url);
-                            if html.contains("<head>") {
-                                html = html.replacen("<head>", &base_tag, 1);
-                            } else if html.contains("<html>") {
-                                html = html.replacen("<html>", &format!("<html>{}", base_tag), 1);
+                            let base_tag = format!(r#"<base href="{}">"#, final_url);
+                            
+                            if let Some(pos) = html.find("<head>") {
+                                html.insert_str(pos + 6, &base_tag);
+                            } else if let Some(pos) = html.find("<html>") {
+                                html.insert_str(pos + 6, &format!("<head>{}</head>", base_tag));
+                            } else {
+                                html = format!(r#"<head>{}</head>{}"#, base_tag, html);
                             }
                             bytes = html.into_bytes();
                         }
@@ -180,7 +184,7 @@ pub fn run() {
                         let tauri_resp = tauri::http::Response::builder()
                             .header("Content-Type", content_type)
                             .header("Access-Control-Allow-Origin", "*")
-                            .header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; frame-ancestors *")
+                            .header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; style-src * 'unsafe-inline'; frame-ancestors *")
                             .body(bytes)
                             .unwrap();
                         let _ = responder.respond(tauri_resp);
@@ -343,4 +347,3 @@ async fn hide_portal(app: &AppHandle, state: &AppState) {
         }
     }
 }
-
