@@ -17,6 +17,15 @@
 
 ---
 
+## 📥 Downloads (Windows v0.1)
+
+Get the latest "One-Click" installers for Windows 10/11:
+
+- **[🚀 GitHub Releases (Recommended)](https://github.com/Lywald/wormlinks/releases)** — Fast global CDN, always the latest version.
+- **[📂 WindowsInstaller Folder](https://github.com/Lywald/wormlinks/tree/master/WindowsInstaller)** — Direct repository access to `.msi` and `.exe` bundles.
+
+---
+
 > [!IMPORTANT]
 > **Compatibility**: Currently **Windows 10/11 only**. macOS (AX API) and Linux (AT-SPI2) support are the top priorities on our roadmap.
 
