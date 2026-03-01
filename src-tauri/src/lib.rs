@@ -132,17 +132,28 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .register_asynchronous_uri_scheme_protocol("wormhole", |_app, request, responder| {
             let uri = request.uri().to_string();
-            let url_str = uri.strip_prefix("wormhole://localhost/").unwrap_or(&uri);
+            // Handle both wormhole://localhost/URL and wormhole://localhostURL
+            let url_str = if uri.contains("localhost/") {
+                uri.splitn(2, "localhost/").nth(1).unwrap_or("")
+            } else {
+                uri.strip_prefix("wormhole://localhost").unwrap_or(&uri)
+            };
+            
             let target_url = match urlencoding::decode(url_str) {
                 Ok(u) => u.to_string(),
                 Err(_) => url_str.to_string(),
             };
 
             tauri::async_runtime::spawn(async move {
+                if target_url.is_empty() || !target_url.starts_with("http") {
+                    let _ = responder.respond(tauri::http::Response::builder().status(400).body(Vec::new()).unwrap());
+                    return;
+                }
+                
                 let client = reqwest::Client::new();
                 match client.get(&target_url).header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36").send().await {
                     Ok(resp) => {
-                        let content_type = resp.headers().get("content-type").and_then(|h| h.to_str().ok()).unwrap_or("text/html").to_string();
+                        let content_type = resp.headers().get("content-type").and_then(|h: &reqwest::header::HeaderValue| h.to_str().ok()).unwrap_or("text/html").to_string();
                         let bytes = resp.bytes().await.unwrap_or_default();
                         
                         let tauri_resp = tauri::http::Response::builder()
@@ -151,10 +162,10 @@ pub fn run() {
                             .header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; frame-ancestors *")
                             .body(bytes.to_vec())
                             .unwrap();
-                        responder.respond(tauri_resp);
+                        let _ = responder.respond(tauri_resp);
                     }
                     Err(_) => {
-                        responder.respond(tauri::http::Response::builder().status(404).body(Vec::new()).unwrap());
+                        let _ = responder.respond(tauri::http::Response::builder().status(404).body(Vec::new()).unwrap());
                     }
                 }
             });
