@@ -8,6 +8,15 @@
 
 **Wormlinks** turns *any text on any screen* into a live portal to rich widgets, data, and media—without app developers doing anything. Just type a `wormlink://` tag anywhere (Slack, Notion, Terminal, PDFs) and watch it come to life.
 
+---
+
+## 📺 See it in Action
+
+[![Wormlinks Demo](https://img.youtube.com/vi/yAYcme5FFe4/maxresdefault.jpg)](https://youtu.be/yAYcme5FFe4)
+*Click the image above to watch the Wormlinks v0.1 Prototype Demo.*
+
+---
+
 > [!IMPORTANT]
 > **Compatibility**: Currently **Windows 10/11 only**. macOS (AX API) and Linux (AT-SPI2) support are the top priorities on our roadmap.
 
