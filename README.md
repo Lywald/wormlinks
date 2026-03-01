@@ -27,6 +27,8 @@ Get the latest "One-Click" installers for Windows 10/11:
 ---
 
 > [!IMPORTANT]
+> **Early Stage**: This is an early prototype. While it works well, you might encounter occasional minor glitches as we refine the detection engine.
+>
 > **Compatibility**: Currently **Windows 10/11 only**. macOS (AX API) and Linux (AT-SPI2) support are the top priorities on our roadmap.
 
 ---
