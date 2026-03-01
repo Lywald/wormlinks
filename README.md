@@ -6,7 +6,7 @@
 [![Svelte 5](https://img.shields.io/badge/Frontend-Svelte%205-ff3e00?style=for-the-badge&logo=svelte)](https://svelte.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-**Wormlinks** turns *any text on any screen* into a live portal to rich widgets, data, and media—without app developers doing anything. Just type a `wormlink://` tag anywhere (Slack, Notion, Terminal, PDFs) and watch it come to life.
+**Wormlinks** turns *any text on any screen* into a live portal to rich widgets, data, and media—without app developers doing anything. Just type a `wormlink://` tag anywhere (Slack, Notion, ChatGPT, Terminal, PDFs) and watch it come to life.
 
 ---
 
