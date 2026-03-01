@@ -39,65 +39,73 @@ impl AutomationManager {
             GetWindowThreadProcessId(hwnd, Some(&mut process_id));
             if process_id == self.own_process_id { return matches; }
 
-            // Get TRUE ROOT window for maximize dimensions (Multi-monitor safe)
             let root_hwnd = GetAncestor(hwnd, GA_ROOT);
             let mut parent_rect = RECT::default();
             let _ = GetWindowRect(root_hwnd, &mut parent_rect);
 
-            let root_element = match self.automation.ElementFromHandle(hwnd) {
-                Ok(el) => el,
-                Err(_) => return matches,
-            };
+            // Point-cloud scan (Center + 4 offsets) for robust "near" detection without subtree glitches
+            let offsets = [(0, 0), (0, -40), (0, 40), (-40, 0), (40, 0)];
+            
+            for (ox, oy) in offsets {
+                let test_point = windows::Win32::Foundation::POINT {
+                    x: point.x + ox,
+                    y: point.y + oy,
+                };
 
-            let condition = match self.automation.CreateTrueCondition() {
-                Ok(c) => c,
-                Err(_) => return matches,
-            };
-
-            let elements = match root_element.FindAll(TreeScope_Subtree, &condition) {
-                Ok(e) => e,
-                Err(_) => return matches,
-            };
-
-            let count = elements.Length().unwrap_or(0);
-            for i in 0..count {
-                if let Ok(element) = elements.GetElement(i) {
-                    if let Ok(offscreen) = element.CurrentIsOffscreen() {
-                        if offscreen.as_bool() { continue; }
-                    }
-
-                    if let Ok(pattern) = element.GetCurrentPattern(UIA_TextPatternId) {
-                        if let Ok(text_pattern) = pattern.cast::<IUIAutomationTextPattern>() {
-                            self.collect_text_pattern_matches(&text_pattern, &element, &parent_rect, &mut matches);
-                        }
-                    }
-
-                    if matches.is_empty() {
-                        if let Ok(val) = element.GetCurrentPattern(UIA_ValuePatternId).and_then(|p| p.cast::<IUIAutomationValuePattern>()) {
-                            if let Ok(v) = val.CurrentValue() {
-                                self.collect_basic_matches(&v.to_string(), &element, &parent_rect, &mut matches);
-                            }
-                        }
-                        if let Ok(name) = element.CurrentName() {
-                            self.collect_basic_matches(&name.to_string(), &element, &parent_rect, &mut matches);
-                        }
-                        
-                        // Fallback for LibreOffice / Legacy apps
-                        if matches.is_empty() {
-                            if let Ok(legacy) = element.GetCurrentPattern(UIA_LegacyIAccessiblePatternId).and_then(|p| p.cast::<IUIAutomationLegacyIAccessiblePattern>()) {
-                                if let Ok(name) = legacy.CurrentName() {
-                                    self.collect_basic_matches(&name.to_string(), &element, &parent_rect, &mut matches);
-                                }
-                                if let Ok(val) = legacy.CurrentValue() {
-                                    self.collect_basic_matches(&val.to_string(), &element, &parent_rect, &mut matches);
-                                }
-                            }
-                        }
-                    }
+                if let Ok(element) = self.automation.ElementFromPoint(test_point) {
+                    self.process_element_hierarchy(&element, &parent_rect, &mut matches);
                 }
             }
         }
+        
+        // De-duplicate matches by URL and position
+        matches.dedup_by(|a, b| a.url == b.url && (a.trigger_x - b.trigger_x).abs() < 1.0);
         matches
+    }
+
+    fn process_element_hierarchy(&self, element: &IUIAutomationElement, parent_rect: &RECT, matches: &mut Vec<crate::WormlinkMatch>) {
+        unsafe {
+            let mut curr = Some(element.clone());
+            let mut depth = 0;
+
+            // Walk up the hierarchy (max 3 levels) to find the wormlink in parent containers (e.g. if hit-test hit an icon)
+            while let Some(el) = curr {
+                if depth > 3 { break; }
+                
+                // 1. Check Text Pattern
+                if let Ok(pattern) = el.GetCurrentPattern(UIA_TextPatternId) {
+                    if let Ok(text_pattern) = pattern.cast::<IUIAutomationTextPattern>() {
+                        self.collect_text_pattern_matches(&text_pattern, &el, parent_rect, matches);
+                    }
+                }
+
+                // 2. Check Value/Name Patterns
+                if let Ok(val) = el.GetCurrentPattern(UIA_ValuePatternId).and_then(|p| p.cast::<IUIAutomationValuePattern>()) {
+                    if let Ok(v) = val.CurrentValue() {
+                        self.collect_basic_matches(&v.to_string(), &el, parent_rect, matches);
+                    }
+                }
+                if let Ok(name) = el.CurrentName() {
+                    self.collect_basic_matches(&name.to_string(), &el, parent_rect, matches);
+                }
+                
+                // 3. Check Legacy Pattern
+                if let Ok(legacy) = el.GetCurrentPattern(UIA_LegacyIAccessiblePatternId).and_then(|p| p.cast::<IUIAutomationLegacyIAccessiblePattern>()) {
+                    if let Ok(name) = legacy.CurrentName() {
+                        self.collect_basic_matches(&name.to_string(), &el, parent_rect, matches);
+                    }
+                    if let Ok(val) = legacy.CurrentValue() {
+                        self.collect_basic_matches(&val.to_string(), &el, parent_rect, matches);
+                    }
+                }
+
+                if !matches.is_empty() { break; }
+                
+                curr = self.automation.CreateTreeWalker(&self.automation.CreateTrueCondition().unwrap()).ok()
+                    .and_then(|w| w.GetParentElement(&el).ok());
+                depth += 1;
+            }
+        }
     }
 
     fn collect_text_pattern_matches(&self, pattern: &IUIAutomationTextPattern, element: &IUIAutomationElement, parent_rect: &RECT, matches: &mut Vec<crate::WormlinkMatch>) {
@@ -117,7 +125,11 @@ impl AutomationManager {
                             let _ = windows::Win32::System::Ole::SafeArrayGetElement(rects_ptr, &2i32, &mut w as *mut _ as *mut _);
                             let _ = windows::Win32::System::Ole::SafeArrayGetElement(rects_ptr, &3i32, &mut h as *mut _ as *mut _);
                             
-                            if left != 0.0 || top != 0.0 {
+                            // Check if this specific text range is within the viewport
+                            let is_outside = top + h <= parent_rect.top as f64 || top >= parent_rect.bottom as f64 || 
+                                             left + w <= parent_rect.left as f64 || left >= parent_rect.right as f64;
+
+                            if (left != 0.0 || top != 0.0) && !is_outside {
                                 matches.push(crate::WormlinkMatch {
                                     url: url.to_string(),
                                     source_app: self.get_app_name(element),
