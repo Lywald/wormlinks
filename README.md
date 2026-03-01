@@ -44,6 +44,8 @@ Wormlinks creates a frictionless "UI Bridge" for Large Language Models. By teach
 
 This effectively gives any LLM **native UI-generation capabilities** across your entire OS, without needing custom plugins or API keys.
 
+![Wormlink AI Synergy Demo](screenshots/demo.png)
+
 ---
 
 ## 🛠 Supported Widgets (v0.1)
