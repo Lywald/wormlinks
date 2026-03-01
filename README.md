@@ -94,7 +94,7 @@ This effectively gives any LLM **native UI-generation capabilities** across your
 - **Core**: Rust (Tauri v2) handling the background polling loop.
 - **Screen Intelligence**: Native Windows `UI Automation` (via `uiautomation` and `windows-rs`) to detect text bounds and window coordinates.
 - **Frontend**: Svelte 5 + Tailwind CSS for "buttery smooth" transparent overlays.
-- **Security**: Sandboxed webviews with strict filesystem scopes for local asset rendering.
+- **Security**: Widgets run in isolated 'sandboxes' and are strictly limited to reading only the files you choose to display.
 
 ## 🗺 Roadmap
 
