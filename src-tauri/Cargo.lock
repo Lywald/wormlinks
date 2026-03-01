@@ -5546,6 +5546,7 @@ name = "wormlinks-app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "http",
  "regex",
  "reqwest 0.12.28",
  "serde",

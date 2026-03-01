@@ -183,13 +183,13 @@
             <div class="w-full h-full flex flex-col">
               <iframe
                 class="flex-1 w-full border-0 bg-white"
-                src={webUrl}
+                src={`wormhole://localhost/${encodeURIComponent(webUrl)}`}
                 title="Web Portal"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen
               ></iframe>
               <div class="bg-gray-900 px-3 py-1 text-[8px] text-gray-400 border-t border-white/10 flex justify-between">
-                <span>Some sites may block embedding</span>
+                <span>Optimized via Wormhole Proxy</span>
                 <a href={webUrl} target="_blank" class="text-blue-400 hover:underline">Open in Browser</a>
               </div>
             </div>

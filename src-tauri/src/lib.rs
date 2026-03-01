@@ -2,12 +2,12 @@ pub mod automation;
 pub mod ocr;
 
 use automation::AutomationManager;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, Emitter, Position, PhysicalPosition, Size, PhysicalSize};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, Position, PhysicalPosition, Size, PhysicalSize};
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem, CheckMenuItem};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering, AtomicU64};
-use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, WindowFromPoint, GetWindowThreadProcessId};
+use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use windows::Win32::Foundation::POINT;
 
 const TRIGGER_THRESHOLD: f64 = 120.0;
@@ -45,7 +45,6 @@ struct AppState {
     last_toggle_time: AtomicU64,
     last_dismiss_time: AtomicU64,
     is_visible: AtomicBool,
-    own_process_id: u32,
 }
 
 fn dist_to_rect(px: f64, py: f64, rx: f64, ry: f64, rw: f64, rh: f64) -> f64 {
@@ -124,16 +123,42 @@ fn toggle_maximize(app: AppHandle, state: tauri::State<Arc<AppState>>) {
 
 pub fn run() {
     tracing_subscriber::fmt::init();
-    let app_state = Arc::new(AppState {
-        own_process_id: std::process::id(),
-        ..Default::default()
-    });
+    let app_state = Arc::new(AppState::default());
     app_state.use_ui_automation.store(true, Ordering::Relaxed);
 
     let setup_state = app_state.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
+        .register_asynchronous_uri_scheme_protocol("wormhole", |_app, request, responder| {
+            let uri = request.uri().to_string();
+            let url_str = uri.strip_prefix("wormhole://localhost/").unwrap_or(&uri);
+            let target_url = match urlencoding::decode(url_str) {
+                Ok(u) => u.to_string(),
+                Err(_) => url_str.to_string(),
+            };
+
+            tauri::async_runtime::spawn(async move {
+                let client = reqwest::Client::new();
+                match client.get(&target_url).header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36").send().await {
+                    Ok(resp) => {
+                        let content_type = resp.headers().get("content-type").and_then(|h| h.to_str().ok()).unwrap_or("text/html").to_string();
+                        let bytes = resp.bytes().await.unwrap_or_default();
+                        
+                        let tauri_resp = tauri::http::Response::builder()
+                            .header("Content-Type", content_type)
+                            .header("Access-Control-Allow-Origin", "*")
+                            .header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; frame-ancestors *")
+                            .body(bytes.to_vec())
+                            .unwrap();
+                        responder.respond(tauri_resp);
+                    }
+                    Err(_) => {
+                        responder.respond(tauri::http::Response::builder().status(404).body(Vec::new()).unwrap());
+                    }
+                }
+            });
+        })
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![get_wormlink_data, toggle_maximize, dismiss_portal, toggle_pin])
         .setup(move |app| {
@@ -217,13 +242,20 @@ pub fn run() {
                                 let d = dist_to_rect(cursor_pos.x as f64, cursor_pos.y as f64, m.trigger_x, m.trigger_y, m.trigger_w, m.trigger_h);
                                 
                                 if d < threshold {
-                                    let (content_changed, pos_changed) = {
+                                    let content_changed = {
+                                        let mut last_url = poller_state.last_injected_url.lock().unwrap();
+                                        if *last_url == m.url { false }
+                                        else { *last_url = m.url.clone(); true }
+                                    };
+                                    
+                                    let pos_changed = {
                                         let active = poller_state.active_match.lock().unwrap();
                                         match &*active {
-                                            Some(old) => (old.url != m.url, (old.x - m.x).abs() > 10.0 || (old.y - m.y).abs() > 10.0),
-                                            None => (true, true)
+                                            Some(old) => (old.x - m.x).abs() > 10.0 || (old.y - m.y).abs() > 10.0,
+                                            None => true
                                         }
                                     };
+
                                     if content_changed || pos_changed || !currently_visible {
                                         update_active_portal(&app_handle, &poller_state, m, content_changed).await;
                                     }
@@ -240,14 +272,8 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-async fn update_active_portal(app: &AppHandle, state: &AppState, m: WormlinkMatch, mut content_changed: bool) {
+async fn update_active_portal(app: &AppHandle, state: &AppState, m: WormlinkMatch, content_changed: bool) {
     let win_label = "active_portal";
-
-    {
-        let mut last_url = state.last_injected_url.lock().unwrap();
-        if *last_url == m.url { content_changed = false; }
-        else { *last_url = m.url.clone(); content_changed = true; }
-    }
 
     { let mut active = state.active_match.lock().unwrap(); *active = Some(m.clone()); }
 
@@ -285,3 +311,4 @@ async fn hide_portal(app: &AppHandle, state: &AppState) {
         }
     }
 }
+
