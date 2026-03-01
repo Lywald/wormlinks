@@ -65,7 +65,10 @@ This effectively gives any LLM **native UI-generation capabilities** across your
 - [x] **`wormlink://web?url=...`** — Live website frames.
 - [x] **`wormlink://map?q=...`** — Embedded Google/OSM maps.
 
-## 🚀 Getting Started
+## 🚀 Getting Started from source
+
+> [!TIP]
+> Most users should use the **[One-Click Installers](#-downloads-windows-v01)** above for the easiest experience.
 
 ### Prerequisites
 - [Rust & Cargo](https://rustup.rs/)
