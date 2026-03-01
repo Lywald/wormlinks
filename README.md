@@ -1,5 +1,5 @@
 # 🪱 Wormlinks
-### Universal Screen Hyperlinks • The "Superpower Layer" for your OS.
+### Universal Screen Hyperlinks • The "Superpower Layer" for Windows.
 
 [![Tauri v2](https://img.shields.io/badge/Framework-Tauri%20v2-blue?style=for-the-badge&logo=tauri)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Backend-Rust-black?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
