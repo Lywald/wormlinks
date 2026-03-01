@@ -12,10 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "Wormlinks Background",
-        "visible": false,
-        "width": 100,
-        "height": 100
+        "label": "main",
+        "title": "Wormlinks",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false
       }
     ],
     "security": {

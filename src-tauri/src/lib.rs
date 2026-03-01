@@ -64,7 +64,6 @@ fn dismiss_portal(app: AppHandle, state: tauri::State<Arc<AppState>>) {
     state.last_dismiss_time.store(now, Ordering::Relaxed);
     state.is_pinned.store(false, Ordering::Relaxed); 
     
-    // Mute this specific URL for 10 seconds
     let current_url = {
         let active = state.active_match.lock().unwrap();
         active.as_ref().map(|m| m.url.clone())
@@ -75,7 +74,6 @@ fn dismiss_portal(app: AppHandle, state: tauri::State<Arc<AppState>>) {
         muted.insert(url, now + 10);
     }
     
-    // Clear the last injected URL so it can be re-triggered immediately after cooldown (if it's a different one)
     {
         let mut last_url = state.last_injected_url.lock().unwrap();
         *last_url = String::new();
@@ -152,7 +150,6 @@ pub fn run() {
                 let client = reqwest::Client::builder()
                     .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                     .timeout(std::time::Duration::from_secs(15))
-                    .redirect(reqwest::redirect::Policy::default())
                     .build()
                     .unwrap_or_default();
 
@@ -171,9 +168,9 @@ pub fn run() {
                             let mut html = String::from_utf8_lossy(&bytes).to_string();
                             let base_tag = format!(r#"<base href="{}">"#, final_url);
                             
-                            if let Some(pos) = html.find("<head>") {
+                            if let Some(pos) = html.to_lowercase().find("<head>") {
                                 html.insert_str(pos + 6, &base_tag);
-                            } else if let Some(pos) = html.find("<html>") {
+                            } else if let Some(pos) = html.to_lowercase().find("<html>") {
                                 html.insert_str(pos + 6, &format!("<head>{}</head>", base_tag));
                             } else {
                                 html = format!(r#"<head>{}</head>{}"#, base_tag, html);
@@ -231,14 +228,11 @@ pub fn run() {
                         unsafe { let _ = GetCursorPos(&mut cursor_pos); }
 
                         let is_pinned = poller_state.is_pinned.load(Ordering::Relaxed);
-
-                        // If pinned, skip all detection to lock onto the current link
                         if is_pinned {
                             tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
                             continue;
                         }
 
-                        // Interaction lock: freeze if mouse is in portal
                         if let Some(win) = app_handle.get_webview_window("active_portal") {
                             if let (Ok(pos), Ok(size), Ok(visible)) = (win.outer_position(), win.outer_size(), win.is_visible()) {
                                 if visible && 
@@ -252,8 +246,6 @@ pub fn run() {
 
                         if let Some(ref am) = automation {
                             let matches = am.find_matches_near_cursor(cursor_pos);
-                            
-                            // Filter out muted URLs
                             let mut filtered_matches = Vec::new();
                             {
                                 let muted = poller_state.muted_urls.lock().unwrap();
@@ -310,7 +302,6 @@ pub fn run() {
 
 async fn update_active_portal(app: &AppHandle, state: &AppState, m: WormlinkMatch, content_changed: bool) {
     let win_label = "active_portal";
-
     { let mut active = state.active_match.lock().unwrap(); *active = Some(m.clone()); }
 
     if let Some(win) = app.get_webview_window(win_label) {
@@ -327,9 +318,17 @@ async fn update_active_portal(app: &AppHandle, state: &AppState, m: WormlinkMatc
         }
     } else {
         let builder = WebviewWindowBuilder::new(app, win_label, WebviewUrl::App("index.html".into()))
-            .title("Wormlinks Portal").inner_size(m.width, m.height).transparent(true).decorations(false).always_on_top(true).skip_taskbar(true);
+            .title("Wormlinks Portal")
+            .inner_size(m.width, m.height)
+            .transparent(true)
+            .decorations(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .visible(false);
+        
         if let Ok(window) = builder.build() {
-            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: m.x as i32, y: m.y as i32 }));
+            let _ = window.set_position(Position::Physical(PhysicalPosition { x: m.x as i32, y: m.y as i32 }));
+            let _ = window.show();
             state.is_visible.store(true, Ordering::Relaxed);
         }
     }
