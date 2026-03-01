@@ -132,7 +132,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .register_asynchronous_uri_scheme_protocol("wormhole", |_app, request, responder| {
             let uri = request.uri().to_string();
-            // Handle both wormhole://localhost/URL and wormhole://localhostURL
             let url_str = if uri.contains("localhost/") {
                 uri.splitn(2, "localhost/").nth(1).unwrap_or("")
             } else {
@@ -150,17 +149,39 @@ pub fn run() {
                     return;
                 }
                 
-                let client = reqwest::Client::new();
-                match client.get(&target_url).header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36").send().await {
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .unwrap_or_default();
+
+                match client.get(&target_url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .send().await {
                     Ok(resp) => {
-                        let content_type = resp.headers().get("content-type").and_then(|h: &reqwest::header::HeaderValue| h.to_str().ok()).unwrap_or("text/html").to_string();
-                        let bytes = resp.bytes().await.unwrap_or_default();
+                        let content_type = resp.headers().get("content-type")
+                            .and_then(|h: &reqwest::header::HeaderValue| h.to_str().ok())
+                            .unwrap_or("text/html").to_string();
+                        
+                        let is_html = content_type.contains("text/html");
+                        let mut bytes = resp.bytes().await.unwrap_or_default().to_vec();
+
+                        if is_html {
+                            let mut html = String::from_utf8_lossy(&bytes).to_string();
+                            // Inject <base> tag to resolve relative paths correctly
+                            let base_tag = format!(r#"<head><base href="{}">"#, target_url);
+                            if html.contains("<head>") {
+                                html = html.replacen("<head>", &base_tag, 1);
+                            } else if html.contains("<html>") {
+                                html = html.replacen("<html>", &format!("<html>{}", base_tag), 1);
+                            }
+                            bytes = html.into_bytes();
+                        }
                         
                         let tauri_resp = tauri::http::Response::builder()
                             .header("Content-Type", content_type)
                             .header("Access-Control-Allow-Origin", "*")
                             .header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; frame-ancestors *")
-                            .body(bytes.to_vec())
+                            .body(bytes)
                             .unwrap();
                         let _ = responder.respond(tauri_resp);
                     }
