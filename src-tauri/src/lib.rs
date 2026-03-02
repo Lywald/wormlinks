@@ -45,7 +45,6 @@ struct AppState {
     last_toggle_time: AtomicU64,
     last_dismiss_time: AtomicU64,
     is_visible: AtomicBool,
-    own_process_id: u32,
 }
 
 fn dist_to_rect(px: f64, py: f64, rx: f64, ry: f64, rw: f64, rh: f64) -> f64 {
@@ -122,10 +121,7 @@ fn toggle_maximize(app: AppHandle, state: tauri::State<Arc<AppState>>) {
 
 pub fn run() {
     tracing_subscriber::fmt::init();
-    let app_state = Arc::new(AppState {
-        own_process_id: std::process::id(),
-        ..Default::default()
-    });
+    let app_state = Arc::new(AppState::default());
     app_state.use_ui_automation.store(true, Ordering::Relaxed);
 
     let setup_state = app_state.clone();

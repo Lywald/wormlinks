@@ -64,7 +64,7 @@ This effectively gives any LLM **native UI-generation capabilities** across your
 - [x] **`wormlink://image?id=...`** — Dynamic image overlays.
 - [x] **`wormlink://youtube?id=...`** — Floating video player.
 - [x] **`wormlink://pdf?path=...`** — Integrated document viewer.
-- [x] **`wormlink://web?url=...`** — Live website frames.
+- [x] **`wormlink://web?url=...`** — Live website frames. *(Note: Many major websites block iframe embedding via `X-Frame-Options` headers. The web widget works best for internal tools, documentation, or sites that permit framing).*
 - [x] **`wormlink://map?q=...`** — Embedded Google/OSM maps.
 
 ## 🚀 Getting Started from source
