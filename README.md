@@ -37,6 +37,8 @@ Get the latest "One-Click" installers for Windows 10/11:
 
 Imagine typing `wormlink://pdf?path=C:/docs/manual.pdf` in a random Slack message or Notion page. Wormlinks detects it in real-time and renders a beautiful, interactive floating PDF viewer exactly over that text. 
 
+![Wormlink Portal in LibreOffice Calc](screenshots/portal-demo.png)
+
 - **Works Everywhere**: Zero friction. No APIs, no plugins, no permissions required from target apps.
 - **Privacy First**: Everything runs locally. Your screen data never leaves your machine.
 - **Lightweight**: Built with Tauri v2. Tiny binary, sub-second detection, and minimal CPU impact (< 2%).
